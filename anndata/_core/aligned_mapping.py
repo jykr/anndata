@@ -349,3 +349,94 @@ class PairwiseArraysView(AlignedViewMixin, PairwiseArraysBase):
 
 PairwiseArraysBase._view_class = PairwiseArraysView
 PairwiseArraysBase._actual_class = PairwiseArrays
+
+
+class MultiIndexArrayBase(AlignedMapping):
+    """\
+    Mapping of key: array-like, where array-like is aligned to both axes of the
+    parent anndata.
+    """
+
+    _allow_df = True
+    attrname = "MultiIndexArray"
+    axes = (0, 1)
+
+    # TODO: I thought I had a more elegant solution to overiding this...
+    def copy(self) -> "MultiIndexArray":
+        d = self._actual_class(self.parent)
+        for k, v in self.items():
+            d[k] = v.copy()
+        return d
+
+    def dim_names(self) -> Tuple[pd.Index]:
+        """Returns dimension names, starting from main axis."""
+        return (
+            (self.parent.obs_names, self.parent.var_names)[self._axis],
+            (self.parent.obs_names, self.parent.var_names)[1 - self._axis],
+        )
+
+    def _validate_value(self, val: pd.DataFrame, key: str) -> pd.DataFrame:
+        """ """
+        if not (val is None or isinstance(val, pd.DataFrame)):
+            raise ValueError(f"pd.DataFrame should be passed for obsx or varx.")
+        if isinstance(val.index, pd.MultiIndex):
+            if not (val.index.get_level_values(0).isin(self.dim_names[0])).all():
+                raise ValueError(
+                    f"value.index for {key} does not match parent’s axis {self.axes[0]} names"
+                )
+            else:
+                multiindex_names = val.index.names
+                val = (
+                    val.set_index(multiindex_names[0])
+                    .reindex(self.dim_names[0])
+                    .set_index(multiindex_names)
+                )
+        elif isinstance(val, pd.DataFrame):
+            if not (val.index.isin(self.dim_names)).all():
+                raise ValueError(
+                    f"value.index for {key} does not match parent’s axis {self.axes[0]} names"
+                )
+
+        if not (
+            (val.columns.isin(self.dim_names[1])).all()
+            and len(val.columns) == len(self.dim_names[1])
+        ):
+            raise ValueError(
+                f"value.columns for {key} does not match parent’s axis {self.axes[1]} names"
+            )
+        else:
+            val = val.loc[:, self.dim_names[1]]
+
+        return val
+
+
+class MultiIndexArray(AlignedActualMixin, MultiIndexArrayBase):
+    def __init__(self, parent: "anndata.AnnData", vals: Optional[Mapping] = None):
+        self._parent = parent
+        self._data = dict()
+        if vals is not None:
+            self.update(vals)
+
+
+class MultiIndexArrayView(AlignedViewMixin, MultiIndexArrayBase):
+    def __init__(
+        self,
+        parent_mapping: MultiIndexArrayBase,
+        parent_view: "anndata.AnnData",
+        subset_idx: TwoDIdx,
+    ):
+        self.parent_mapping = parent_mapping
+        self._parent = parent_view
+        self.subset_idx = subset_idx
+
+    def __getitem__(self, key: str) -> V:
+        return as_view(
+            _subset(
+                self.parent_mapping[key], self.subset_idx, self._parent.dim_names[0]
+            ),
+            ElementRef(self.parent, self.attrname, (key,)),
+        )
+
+
+MultiIndexArrayBase._view_class = MultiIndexArrayView
+MultiIndexArrayBase._actual_class = MultiIndexArray

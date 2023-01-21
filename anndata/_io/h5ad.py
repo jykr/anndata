@@ -37,7 +37,6 @@ from .utils import (
 )
 
 H5Group = Union[h5py.Group, h5py.File]
-H5Dataset = Union[h5py.Dataset]
 T = TypeVar("T")
 
 
@@ -115,6 +114,8 @@ def write_h5ad(
         write_attribute(f, "varm", adata.varm, dataset_kwargs=dataset_kwargs)
         write_attribute(f, "obsp", adata.obsp, dataset_kwargs=dataset_kwargs)
         write_attribute(f, "varp", adata.varp, dataset_kwargs=dataset_kwargs)
+        write_attribute(f, "obsx", adata.obsx, dataset_kwargs=dataset_kwargs)
+        write_attribute(f, "varx", adata.varx, dataset_kwargs=dataset_kwargs)
         write_attribute(f, "layers", adata.layers, dataset_kwargs=dataset_kwargs)
         write_attribute(f, "uns", adata.uns, dataset_kwargs=dataset_kwargs)
 

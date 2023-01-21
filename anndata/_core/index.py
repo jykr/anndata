@@ -140,6 +140,19 @@ def _subset_df(df: pd.DataFrame, subset_idx: Index):
     return df.iloc[subset_idx]
 
 
+@_subset.register(pd.DataFrame)
+def _subset_multiIndex_df(df: pd.DataFrame, subset_idx: Index, level_values: pd.Index):
+    """Subsets multiindex dataframe by selecting level_values[subset_idx] in first level of df.Index."""
+    if isinstance(subset_idx, Index1D):
+        return df.loc[level_values[subset_idx]]
+    elif isinstance(subset_idx, Tuple):
+        return df.loc[level_values[subset_idx[0]], subset_idx[1]]
+    else:
+        raise NotImplementedError(
+            "indexing multiindex df with sparse matrix is not supported (yet)."
+        )
+
+
 # Registration for SparseDataset occurs in sparse_dataset.py
 @_subset.register(h5py.Dataset)
 def _subset_dataset(d, subset_idx):

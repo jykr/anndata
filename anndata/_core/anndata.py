@@ -32,6 +32,8 @@ from .aligned_mapping import (
     AxisArraysView,
     PairwiseArrays,
     PairwiseArraysView,
+    MultiIndexArray,
+    MultiIndexArrayView,
     Layers,
     LayersView,
 )
@@ -297,6 +299,8 @@ class AnnData(metaclass=utils.DeprecationMixinMeta):
         *,
         obsp: Optional[Union[np.ndarray, Mapping[str, Sequence[Any]]]] = None,
         varp: Optional[Union[np.ndarray, Mapping[str, Sequence[Any]]]] = None,
+        obsx: Optional[Union[pd.DataFrame, Mapping[str, Iterable[Any]]]] = None,
+        varx: Optional[Union[pd.DataFrame, Mapping[str, Iterable[Any]]]] = None,
         oidx: Index1D = None,
         vidx: Index1D = None,
     ):
@@ -318,6 +322,8 @@ class AnnData(metaclass=utils.DeprecationMixinMeta):
                 shape=shape,
                 obsp=obsp,
                 varp=varp,
+                obsx=obsx,
+                varx=varx,
                 filename=filename,
                 filemode=filemode,
             )
@@ -357,6 +363,9 @@ class AnnData(metaclass=utils.DeprecationMixinMeta):
         self._layers = adata_ref.layers._view(self, (oidx, vidx))
         self._obsp = adata_ref.obsp._view(self, oidx)
         self._varp = adata_ref.varp._view(self, vidx)
+        self._obsx = adata_ref.obsx._view(self, oidx)
+        self._varx = adata_ref.varx._view(self, vidx)
+        
         # Speical case for old neighbors, backwards compat. Remove in anndata 0.8.
         uns_new = _slice_uns_sparse_matrices(
             copy(adata_ref._uns), self._oidx, adata_ref.n_obs
@@ -393,6 +402,8 @@ class AnnData(metaclass=utils.DeprecationMixinMeta):
         varm=None,
         varp=None,
         obsp=None,
+        obsx=None,
+        varx=None,
         raw=None,
         layers=None,
         dtype="float32",
@@ -425,7 +436,7 @@ class AnnData(metaclass=utils.DeprecationMixinMeta):
                     raise ValueError(
                         "If `X` is a dict no further arguments must be provided."
                     )
-                X, obs, var, uns, obsm, varm, obsp, varp, layers, raw = (
+                X, obs, var, uns, obsm, varm, obsp, varp, obsx, varx, layers, raw = (
                     X._X,
                     X.obs,
                     X.var,
@@ -434,6 +445,8 @@ class AnnData(metaclass=utils.DeprecationMixinMeta):
                     X.varm,
                     X.obsp,
                     X.varp,
+                    X.obsx,
+                    X.varx,
                     X.layers,
                     X.raw,
                 )
@@ -520,6 +533,9 @@ class AnnData(metaclass=utils.DeprecationMixinMeta):
         self._obsp = PairwiseArrays(self, 0, vals=convert_to_dict(obsp))
         self._varp = PairwiseArrays(self, 1, vals=convert_to_dict(varp))
 
+        self._obsx = MultiIndexArray(self, 0, vals=convert_to_dict(obsx))
+        self._varx = MultiIndexArray(self, 1, vals=convert_to_dict(varx))
+
         # Backwards compat for connectivities matrices in uns["neighbors"]
         _move_adj_mtx({"uns": self._uns, "obsp": self._obsp})
 
@@ -583,6 +599,8 @@ class AnnData(metaclass=utils.DeprecationMixinMeta):
             "layers",
             "obsp",
             "varp",
+            "obsx",
+            "varx",
         ]:
             keys = getattr(self, attr).keys()
             if len(keys) > 0:
@@ -1015,6 +1033,52 @@ class AnnData(metaclass=utils.DeprecationMixinMeta):
     def varp(self):
         self.varp = dict()
 
+    @property
+    def obsx(self) -> Union[PairwiseArrays, PairwiseArraysView]:
+        """\
+        Pairwise annotation of observations,
+        a mutable mapping with array-like values.
+
+        Stores for each key a two or higher-dimensional :class:`~numpy.ndarray`
+        whose first two dimensions are of length `n_obs`.
+        Is sliced with `data` and `obs` but behaves otherwise like a :term:`mapping`.
+        """
+        return self._obsx
+
+    @obsx.setter
+    def obsx(self, value):
+        obsx = PairwiseArrays(self, 0, vals=convert_to_dict(value))
+        if self.is_view:
+            self._init_as_actual(self.copy())
+        self._obsx = obsx
+
+    @obsx.deleter
+    def obsx(self):
+        self.obsx = dict()
+
+    @property
+    def varx(self) -> Union[PairwiseArrays, PairwiseArraysView]:
+        """\
+        Pairwise annotation of observations,
+        a mutable mapping with array-like values.
+
+        Stores for each key a two or higher-dimensional :class:`~numpy.ndarray`
+        whose first two dimensions are of length `n_var`.
+        Is sliced with `data` and `var` but behaves otherwise like a :term:`mapping`.
+        """
+        return self._varx
+
+    @varx.setter
+    def varx(self, value):
+        varx = PairwiseArrays(self, 1, vals=convert_to_dict(value))
+        if self.is_view:
+            self._init_as_actual(self.copy())
+        self._varx = varx
+
+    @varx.deleter
+    def varx(self):
+        self.varx = dict()
+
     def obs_keys(self) -> List[str]:
         """List keys of observation annotation :attr:`obs`."""
         return self._obs.keys().tolist()
@@ -1030,6 +1094,14 @@ class AnnData(metaclass=utils.DeprecationMixinMeta):
     def varm_keys(self) -> List[str]:
         """List keys of variable annotation :attr:`varm`."""
         return list(self._varm.keys())
+
+    def obsx_keys(self) -> List[str]:
+        """List keys of observation annotation :attr:`obsx`."""
+        return list(self._obsx.keys())
+
+    def varx_keys(self) -> List[str]:
+        """List keys of variable annotation :attr:`varx`."""
+        return list(self._varx.keys())
 
     def uns_keys(self) -> List[str]:
         """List keys of unstructured annotation."""
@@ -1309,6 +1381,8 @@ class AnnData(metaclass=utils.DeprecationMixinMeta):
             varm=self.obsm.flipped(),
             obsp=self.varp.copy(),
             varp=self.obsp.copy(),
+            obsx=self.varx.copy(),
+            varx=self.obsx.copy(),
             filename=self.filename,
             layers={k: t_csr(v) for k, v in self.layers.items()},
             dtype=self.X.dtype.name if X is not None else "float32",
@@ -1456,7 +1530,17 @@ class AnnData(metaclass=utils.DeprecationMixinMeta):
                 )
         new = {}
 
-        for key in ["obs", "var", "obsm", "varm", "obsp", "varp", "layers"]:
+        for key in [
+            "obs",
+            "var",
+            "obsm",
+            "varm",
+            "obsp",
+            "varp",
+            "obsx",
+            "varx",
+            "layers",
+        ]:
             if key in kwargs:
                 new[key] = kwargs[key]
             else:
