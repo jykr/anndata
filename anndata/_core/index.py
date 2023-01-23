@@ -5,9 +5,14 @@ from typing import Union, Sequence, Optional, Tuple
 
 import h5py
 import numpy as np
-import pandas as pd
+
 from scipy.sparse import spmatrix, issparse
 
+from .data_types import MultiIndexDataFrame
+import warnings
+
+warnings.simplefilter(action="ignore", category=FutureWarning)
+import pandas as pd
 
 Index1D = Union[slice, int, str, np.int64, np.ndarray]
 Index = Union[Index1D, Tuple[Index1D, Index1D], spmatrix]
@@ -140,13 +145,15 @@ def _subset_df(df: pd.DataFrame, subset_idx: Index):
     return df.iloc[subset_idx]
 
 
-@_subset.register(pd.DataFrame)
-def _subset_multiIndex_df(df: pd.DataFrame, subset_idx: Index, level_values: pd.Index):
+@_subset.register(MultiIndexDataFrame)
+def _subset_multiIndex_df(
+    df: MultiIndexDataFrame, subset_idx: Index, level_values: pd.Index
+):
     """Subsets multiindex dataframe by selecting level_values[subset_idx] in first level of df.Index."""
-    if isinstance(subset_idx, Index1D):
-        return df.loc[level_values[subset_idx]]
+    if isinstance(subset_idx, (slice, int, str, np.int64, np.ndarray)):
+        return df.loc[pd.IndexSlice[level_values[subset_idx], :], :]
     elif isinstance(subset_idx, Tuple):
-        return df.loc[level_values[subset_idx[0]], subset_idx[1]]
+        return df.loc[pd.IndexSlice[level_values[subset_idx[0]], :], subset_idx[1]]
     else:
         raise NotImplementedError(
             "indexing multiindex df with sparse matrix is not supported (yet)."

@@ -112,7 +112,19 @@ def test_attr_deletion():
     full = gen_adata((30, 30))
     # Empty has just X, obs_names, var_names
     empty = AnnData(None, obs=full.obs[[]], var=full.var[[]])
-    for attr in ["X", "obs", "var", "obsm", "varm", "obsp", "varp", "layers", "uns"]:
+    for attr in [
+        "X",
+        "obs",
+        "var",
+        "obsm",
+        "varm",
+        "obsp",
+        "varp",
+        "obsx",
+        "varx",
+        "layers",
+        "uns",
+    ]:
         delattr(full, attr)
         assert_equal(getattr(full, attr), getattr(empty, attr))
     assert_equal(full, empty, exact=True)
@@ -164,7 +176,7 @@ def test_setting_index_names_error(attr):
     orig = adata_sparse[:2, :2]
     adata = adata_sparse[:2, :2]
     assert getattr(adata, attr).name is None
-    with pytest.raises(ValueError, match=fr"AnnData expects \.{attr[:3]}\.index\.name"):
+    with pytest.raises(ValueError, match=rf"AnnData expects \.{attr[:3]}\.index\.name"):
         setattr(adata, attr, pd.Index(["x", "y"], name=0))
     assert adata.is_view
     assert getattr(adata, attr).tolist() != ["x", "y"]
@@ -416,6 +428,15 @@ def test_multicol():
     adata.obsm["c"] = np.array([[0.0, 1.0], [2, 3]])
     assert adata.obsm_keys() == ["c"]
     assert adata.obsm["c"].tolist() == [[0.0, 1.0], [2, 3]]
+
+
+def test_multiindex():
+    adata = AnnData(np.array([[1, 2, 3], [4, 5, 6]]))
+    # 'c' keeps the columns as should be
+    adata.obsx["c"] = pd.DataFrame(
+        np.random.randn(5, 3), index=[[0, 0, 0, 1, 1], ["a", "b", "c", "a", "b"]]
+    )
+    assert adata.obsx_keys() == ["c"]
 
 
 def test_n_obs():

@@ -365,7 +365,7 @@ class AnnData(metaclass=utils.DeprecationMixinMeta):
         self._varp = adata_ref.varp._view(self, vidx)
         self._obsx = adata_ref.obsx._view(self, oidx)
         self._varx = adata_ref.varx._view(self, vidx)
-        
+
         # Speical case for old neighbors, backwards compat. Remove in anndata 0.8.
         uns_new = _slice_uns_sparse_matrices(
             copy(adata_ref._uns), self._oidx, adata_ref.n_obs
@@ -1034,9 +1034,9 @@ class AnnData(metaclass=utils.DeprecationMixinMeta):
         self.varp = dict()
 
     @property
-    def obsx(self) -> Union[PairwiseArrays, PairwiseArraysView]:
+    def obsx(self) -> Union[MultiIndexArray, MultiIndexArrayView]:
         """\
-        Pairwise annotation of observations,
+        MultiIndex annotation of observations,
         a mutable mapping with array-like values.
 
         Stores for each key a two or higher-dimensional :class:`~numpy.ndarray`
@@ -1047,7 +1047,7 @@ class AnnData(metaclass=utils.DeprecationMixinMeta):
 
     @obsx.setter
     def obsx(self, value):
-        obsx = PairwiseArrays(self, 0, vals=convert_to_dict(value))
+        obsx = MultiIndexArray(self, 0, vals=convert_to_dict(value))
         if self.is_view:
             self._init_as_actual(self.copy())
         self._obsx = obsx
@@ -1057,9 +1057,9 @@ class AnnData(metaclass=utils.DeprecationMixinMeta):
         self.obsx = dict()
 
     @property
-    def varx(self) -> Union[PairwiseArrays, PairwiseArraysView]:
+    def varx(self) -> Union[MultiIndexArray, MultiIndexArrayView]:
         """\
-        Pairwise annotation of observations,
+        MultiIndex annotation of observations,
         a mutable mapping with array-like values.
 
         Stores for each key a two or higher-dimensional :class:`~numpy.ndarray`
@@ -1070,7 +1070,7 @@ class AnnData(metaclass=utils.DeprecationMixinMeta):
 
     @varx.setter
     def varx(self, value):
-        varx = PairwiseArrays(self, 1, vals=convert_to_dict(value))
+        varx = MultiIndexArray(self, 1, vals=convert_to_dict(value))
         if self.is_view:
             self._init_as_actual(self.copy())
         self._varx = varx

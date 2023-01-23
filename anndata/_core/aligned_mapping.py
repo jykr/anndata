@@ -13,7 +13,7 @@ from . import raw, anndata
 from .views import as_view
 from .access import ElementRef
 from .index import _subset
-
+from .data_types import MultiIndexDataFrame
 
 OneDIdx = Union[Sequence[int], Sequence[bool], slice]
 TwoDIdx = Tuple[OneDIdx, OneDIdx]
@@ -84,7 +84,11 @@ class AlignedMapping(cabc.MutableMapping, ABC):
     def copy(self):
         d = self._actual_class(self.parent, self._axis)
         for k, v in self.items():
-            d[k] = v.copy()
+            try:
+                d[k] = v.copy()
+            except Exception as e:
+                print(f"error occured for key {k} with value {v}")
+                raise e
         return d
 
     def _view(self, parent: "anndata.AnnData", subset_idx: I):
@@ -362,12 +366,16 @@ class MultiIndexArrayBase(AlignedMapping):
     axes = (0, 1)
 
     # TODO: I thought I had a more elegant solution to overiding this...
+    # def __iter__(self):
+    #     pass
+
     def copy(self) -> "MultiIndexArray":
-        d = self._actual_class(self.parent)
+        d = self._actual_class(self.parent, self._axis)
         for k, v in self.items():
             d[k] = v.copy()
         return d
 
+    @property
     def dim_names(self) -> Tuple[pd.Index]:
         """Returns dimension names, starting from main axis."""
         return (
@@ -386,11 +394,25 @@ class MultiIndexArrayBase(AlignedMapping):
                 )
             else:
                 multiindex_names = val.index.names
-                val = (
-                    val.set_index(multiindex_names[0])
-                    .reindex(self.dim_names[0])
-                    .set_index(multiindex_names)
+                level_0_order = pd.Series(
+                    range(len(self.dim_names[0])), index=pd.Index(self.dim_names[0])
                 )
+                if multiindex_names[0] is None:
+                    df = val.reset_index()
+                    val = (
+                        df.set_index(df.columns[0])
+                        .sort_index(key=lambda k: level_0_order[k])
+                        .reset_index()
+                        .set_index(df.columns[:2].tolist())
+                    )
+                else:
+                    val = (
+                        val.reset_index()
+                        .set_index(multiindex_names[0])
+                        .sort_index(key=lambda k: level_0_order[k])
+                        .reset_index()
+                        .set_index(multiindex_names)
+                    )
         elif isinstance(val, pd.DataFrame):
             if not (val.index.isin(self.dim_names)).all():
                 raise ValueError(
@@ -407,12 +429,15 @@ class MultiIndexArrayBase(AlignedMapping):
         else:
             val = val.loc[:, self.dim_names[1]]
 
-        return val
+        return MultiIndexDataFrame(val)
 
 
 class MultiIndexArray(AlignedActualMixin, MultiIndexArrayBase):
-    def __init__(self, parent: "anndata.AnnData", vals: Optional[Mapping] = None):
+    def __init__(
+        self, parent: "anndata.AnnData", axis: int, vals: Optional[Mapping] = None
+    ):
         self._parent = parent
+        self._axis = axis
         self._data = dict()
         if vals is not None:
             self.update(vals)
@@ -428,11 +453,14 @@ class MultiIndexArrayView(AlignedViewMixin, MultiIndexArrayBase):
         self.parent_mapping = parent_mapping
         self._parent = parent_view
         self.subset_idx = subset_idx
+        self._axis = parent_mapping._axis
 
     def __getitem__(self, key: str) -> V:
         return as_view(
             _subset(
-                self.parent_mapping[key], self.subset_idx, self._parent.dim_names[0]
+                self.parent_mapping[key],
+                self.subset_idx,
+                self.parent_mapping.dim_names[0],
             ),
             ElementRef(self.parent, self.attrname, (key,)),
         )
